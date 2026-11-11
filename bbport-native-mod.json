@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "id": "hunters-atlas",
+  "name": "Hunter's Atlas",
+  "native_api": 1,
+  "module": "native/hunters_atlas.dll",
+  "game_executables": [
+    "d65f0b4f01d59166aed16f8604196d8b7dd805abbf0758b356e8f1354c9429f9"
+  ],
+  "integrity": {
+    "native/hunters_atlas.dll": "d8a2a386673705036485472e81e8bf38ec665d79a3b6406ec53f038fff46d981",
+    "maps-baked/atlas2-index.json": "1abb6e76619713fedb62c052b00112a15b77940187df16057b0ab19a5d0c4876"
+  },
+  "environment": {
+    "BB_ATLAS_ENABLED": "1",
+    "BB_ATLAS2_ENABLED": "1",
+    "BB_ATLAS2_ASYNC_LOAD": "1",
+    "BB_ATLAS2_INDEX_SHA256": "1abb6e76619713fedb62c052b00112a15b77940187df16057b0ab19a5d0c4876",
+    "BB_ATLAS2_DIR": {
+      "path": "maps-baked"
+    },
+    "BB_MAP_DIR": {
+      "path": "maps"
+    },
+    "BB_MAP_ART_DIR": {
+      "path": "art"
+    },
+    "BB_MAP_CATALOG": {
+      "path": "maps/catalog.json"
+    },
+    "BB_MAP_FONT": {
+      "path": "art/native-font.ttf"
+    },
+    "BB_MAP_CONFIG": {
+      "path": "config/settings.ini"
+    },
+    "BB_MAP_TRAVEL_ENABLED": "1",
+    "BB_MAP_ITEMS_ENABLED": "1",
+    "BB_MAP_FOG_ENABLED": "0",
+    "BB_MAP_NPC_MODE": "new_dialogue",
+    "BB_MAP_ITEM_CATEGORIES": "healing,insight,equipment,echoes",
+    "BB_ATLAS_FEATURES": "{\"atlas_fog_enabled\":false,\"atlas_item_echoes\":true,\"atlas_item_equipment\":true,\"atlas_item_healing\":true,\"atlas_item_insight\":true,\"atlas_items_enabled\":true,\"atlas_npc_mode\":\"new_dialogue\",\"atlas_travel_enabled\":true}"
+  },
+  "version": "0.1.2"
+}
