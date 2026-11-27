@@ -155,7 +155,15 @@ jobs:
           git config --global core.autocrlf false
           export MSYS2_ROOT=$(cygpath -u "$(cygpath -w /)" | sed 's:/$::')
           echo "MSYS2_WIN_ROOT=$(cygpath -w /)" >> "$GITHUB_ENV"
+          export NINJAFLAGS="-j 4"
+          df -h /c /d 2>/dev/null || true
+          set +e
           bash build.sh
+          code=$?
+          set -e
+          echo "build.sh exit=$code"
+          if [ $code -ne 0 ]; then tail -100 out/gpu-build.log 2>/dev/null; fi
+          exit $code
 
       - name: Upload build log on failure
         if: failure() && steps.target.outputs.should_build == 'true'
