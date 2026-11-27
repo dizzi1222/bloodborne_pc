@@ -405,7 +405,7 @@ function Apply-OfficialBbportArchive {
         }
 
         $preserveNames = @(
-            'user', 'mods', 'bbport.ini', 'input.ini', 'mods.json', 'patches.json',
+            'user', 'out', 'mods', 'bbport.ini', 'input.ini', 'mods.json', 'patches.json',
             'fsr4vk', 'seamless', 'bbsc', 'last_run.log'
         )
 
