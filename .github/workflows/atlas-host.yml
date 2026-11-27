@@ -1,0 +1,213 @@
+name: Build Hunter's Atlas Host
+
+on:
+  push:
+    branches:
+      - atlas-ci
+    paths:
+      - '.github/workflows/atlas-host.yml'
+      - '.github/atlas/**'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Upstream release tag to build (e.g. windows-v1.9.8.6). Leave empty for latest.'
+        required: false
+        default: ''
+      atlas_branch:
+        description: 'Fork branch containing the Atlas native-mod commits'
+        required: false
+        default: 'atlas-native-mod'
+      atlas_base:
+        description: 'Base commit before Atlas commits (default: 115a029)'
+        required: false
+        default: '115a029'
+      prerelease:
+        description: 'Publish as GitHub pre-release (true/false)'
+        required: false
+        default: 'true'
+      force:
+        description: 'Rebuild even if a release for this upstream tag + Atlas tip already exists'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '17 */6 * * *'
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: atlas-host-ci
+  cancel-in-progress: false
+
+jobs:
+  build-host:
+    name: Build & Publish Atlas Host (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Configure Git for LF line endings and long paths
+        shell: pwsh
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+          git config --global core.longpaths true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Stage CI scripts outside working tree & resolve target release
+        id: target
+        shell: pwsh
+        env:
+          INPUT_UPSTREAM_TAG: ${{ inputs.upstream_tag }}
+          INPUT_ATLAS_BRANCH: ${{ inputs.atlas_branch || 'atlas-native-mod' }}
+          INPUT_ATLAS_BASE: ${{ inputs.atlas_base || '115a029' }}
+          INPUT_PRERELEASE: ${{ inputs.prerelease || 'true' }}
+          INPUT_FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          $ciDir = Join-Path $env:RUNNER_TEMP 'atlas-ci'
+          if (Test-Path -LiteralPath $ciDir) {
+              Remove-Item -LiteralPath $ciDir -Recurse -Force
+          }
+          Copy-Item -LiteralPath '.github/atlas' -Destination $ciDir -Recurse -Force
+          "ATLAS_CI_DIR=$ciDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $env:ATLAS_CI_DIR = $ciDir
+          python "$ciDir\resolve_target.py"
+
+      - name: Cherry-pick Atlas commits onto upstream release tag
+        if: steps.target.outputs.should_build == 'true'
+        shell: pwsh
+        run: |
+          python "$env:ATLAS_CI_DIR\prepare_tree.py"
+
+      - name: Initialize submodules
+        if: steps.target.outputs.should_build == 'true'
+        shell: pwsh
+        run: |
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Setup Windows Python 3.14 (for PyInstaller launcher freeze)
+        if: steps.target.outputs.should_build == 'true'
+        id: py314
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          architecture: 'x64'
+
+      - name: Verify Windows Python 3.14 Tcl/Tk & SSL support
+        if: steps.target.outputs.should_build == 'true'
+        shell: pwsh
+        run: |
+          $py = (Get-Command python).Source
+          python -c "import sys, ssl, tkinter; assert sys.version_info[:2] == (3, 14); tkinter.Tcl().eval('info patchlevel'); print('WINPYTHON OK:', sys.executable)"
+          "WINPYTHON=$py" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Setup MSYS2 CLANG64 toolchain
+        if: steps.target.outputs.should_build == 'true'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANG64
+          update: true
+          install: >-
+            git
+            patch
+            unzip
+            zip
+            mingw-w64-clang-x86_64-toolchain
+            mingw-w64-clang-x86_64-cmake
+            mingw-w64-clang-x86_64-ninja
+            mingw-w64-clang-x86_64-pkgconf
+            mingw-w64-clang-x86_64-python
+            mingw-w64-clang-x86_64-vulkan-headers
+            mingw-w64-clang-x86_64-vulkan-loader
+            mingw-w64-clang-x86_64-vulkan-memory-allocator
+            mingw-w64-clang-x86_64-glslang
+            mingw-w64-clang-x86_64-sdl3
+            mingw-w64-clang-x86_64-fmt
+            mingw-w64-clang-x86_64-boost
+            mingw-w64-clang-x86_64-robin-map
+            mingw-w64-clang-x86_64-xxhash
+            mingw-w64-clang-x86_64-ffmpeg
+            mingw-w64-clang-x86_64-zydis
+            mingw-w64-clang-x86_64-spirv-tools
+            mingw-w64-clang-x86_64-spirv-headers
+            mingw-w64-clang-x86_64-spirv-cross
+            mingw-w64-clang-x86_64-protobuf
+            mingw-w64-clang-x86_64-openssl
+            mingw-w64-clang-x86_64-zlib
+            mingw-w64-clang-x86_64-miniupnpc
+            mingw-w64-clang-x86_64-nlohmann-json
+
+      - name: Compile host (build.sh in MSYS2 CLANG64)
+        if: steps.target.outputs.should_build == 'true'
+        shell: msys2 {0}
+        run: |
+          git config --global --add safe.directory '*'
+          git config --global core.autocrlf false
+          export MSYS2_ROOT=$(cygpath -u "$(cygpath -w /)" | sed 's:/$::')
+          echo "MSYS2_WIN_ROOT=$(cygpath -w /)" >> "$GITHUB_ENV"
+          bash build.sh
+
+      - name: Upload build log on failure
+        if: failure() && steps.target.outputs.should_build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-build-log-${{ steps.target.outputs.host_version }}
+          path: out/gpu-build.log
+          if-no-files-found: ignore
+
+      - name: Freeze launcher & package Atlas host ZIP
+        if: steps.target.outputs.should_build == 'true'
+        shell: pwsh
+        run: |
+          & $env:WINPYTHON "$env:ATLAS_CI_DIR\package_host.py"
+
+      - name: Tag patched commit & publish GitHub Release
+        if: steps.target.outputs.should_build == 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.target.outputs.release_tag }}
+          HOST_VERSION: ${{ steps.target.outputs.host_version }}
+          BASE_VERSION: ${{ steps.target.outputs.base_version }}
+          IS_PRERELEASE: ${{ steps.target.outputs.prerelease }}
+        run: |
+          git tag -f "$env:RELEASE_TAG" HEAD
+          git push -f origin "refs/tags/$env:RELEASE_TAG"
+
+          $assets = Get-ChildItem -LiteralPath 'out/atlas-release-assets' -File |
+              Where-Object { $_.Name -ne 'RELEASE-NOTES.md' } |
+              ForEach-Object { $_.FullName }
+
+          $notesFile = 'out/atlas-release-assets/RELEASE-NOTES.md'
+          $title = "Hunter's Atlas Host $($env:HOST_VERSION) (bbport $($env:BASE_VERSION))"
+
+          $existing = $false
+          gh release view "$env:RELEASE_TAG" *> $null
+          if ($LASTEXITCODE -eq 0) {
+              $existing = $true
+          }
+
+          if ($existing) {
+              gh release edit "$env:RELEASE_TAG" --title "$title" --notes-file "$notesFile" --prerelease=$($env:IS_PRERELEASE)
+              gh release upload "$env:RELEASE_TAG" @assets --clobber
+          } else {
+              $createArgs = @(
+                  'release', 'create', "$env:RELEASE_TAG",
+                  '--title', "$title",
+                  '--notes-file', "$notesFile"
+              )
+              if ($env:IS_PRERELEASE -eq 'true') {
+                  $createArgs += '--prerelease'
+              }
+              $createArgs += $assets
+              gh @createArgs
+          }
