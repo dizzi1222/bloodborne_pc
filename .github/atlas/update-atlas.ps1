@@ -390,6 +390,14 @@ function Apply-OfficialBbportArchive {
         [Parameter(Mandatory = $true)][string]$RootPath
     )
     Add-Type -AssemblyName System.IO.Compression.FileSystem
+    # Extraction (temp) + files written in place + _internal staging, on the same C: drive usually.
+    $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try { $unpacked = ($archive.Entries | Measure-Object -Property Length -Sum).Sum } finally { $archive.Dispose() }
+    $needed = [int64](2 * $unpacked + 300MB)
+    $drive = New-Object System.IO.DriveInfo ([System.IO.Path]::GetPathRoot((Resolve-Path -LiteralPath $RootPath).Path))
+    if ($drive.AvailableFreeSpace -lt $needed) {
+        throw ("No hay espacio suficiente para actualizar bbport: hacen falta {0:N1} GB libres y hay {1:N1} GB. No se modifico nada." -f ($needed / 1GB), ($drive.AvailableFreeSpace / 1GB))
+    }
     $extractRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("bbport-official-" + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
     try {
@@ -437,17 +445,33 @@ function Apply-OfficialBbportArchive {
             }
         })
 
+        # Never delete before copying: a full disk would leave a half-empty bin\. Folders are
+        # overlaid file by file; only _internal is swapped whole, by renaming, after a copy beside it.
         foreach ($entry in $ordered) {
             $dest = Join-Path $RootPath $entry.Name
-            if ($entry.PSIsContainer) {
-                if (Test-Path -LiteralPath $dest) {
-                    Remove-Item -LiteralPath $dest -Recurse -Force
+            if ($entry.Name -ieq 'bbport-files.json') { continue }
+            if ($entry.Name -ieq '_internal') {
+                $staged = Join-Path $RootPath '.atlas-update-internal'
+                $old = Join-Path $RootPath '.atlas-update-internal-old'
+                foreach ($leftover in @($staged, $old)) {
+                    if (Test-Path -LiteralPath $leftover) { Remove-Item -LiteralPath $leftover -Recurse -Force }
                 }
-                Copy-Item -LiteralPath $entry.FullName -Destination $dest -Recurse -Force
+                Copy-Item -LiteralPath $entry.FullName -Destination $staged -Recurse -Force
+                if (Test-Path -LiteralPath $dest) { Rename-Item -LiteralPath $dest -NewName (Split-Path -Leaf $old) }
+                Rename-Item -LiteralPath $staged -NewName '_internal'
+                if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force -ErrorAction SilentlyContinue }
+            } elseif ($entry.PSIsContainer) {
+                Get-ChildItem -LiteralPath $entry.FullName -File -Recurse -Force | ForEach-Object {
+                    $target = Join-Path $dest $_.FullName.Substring($entry.FullName.Length + 1)
+                    New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+                    Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+                }
             } else {
                 Copy-Item -LiteralPath $entry.FullName -Destination $dest -Force
             }
         }
+        # The manifest last: until here the installation still reports its old version.
+        Copy-Item -LiteralPath (Join-Path $pkgRoot 'bbport-files.json') -Destination (Join-Path $RootPath 'bbport-files.json') -Force
     } finally {
         Remove-Item -LiteralPath $extractRoot -Recurse -Force -ErrorAction SilentlyContinue
     }

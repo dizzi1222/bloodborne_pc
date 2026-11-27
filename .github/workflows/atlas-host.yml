@@ -73,7 +73,8 @@ jobs:
           INPUT_ATLAS_BRANCH: ${{ inputs.atlas_branch || 'atlas-native-mod' }}
           INPUT_ATLAS_BASE: ${{ inputs.atlas_base || '115a029' }}
           INPUT_PRERELEASE: ${{ inputs.prerelease || 'true' }}
-          INPUT_FORCE: ${{ inputs.force || 'false' }}
+          # A push to atlas-ci changes the CI or the updater: publish a fresh build with it.
+          INPUT_FORCE: ${{ inputs.force || (github.event_name == 'push' && 'true') || 'false' }}
         run: |
           $ciDir = Join-Path $env:RUNNER_TEMP 'atlas-ci'
           if (Test-Path -LiteralPath $ciDir) {

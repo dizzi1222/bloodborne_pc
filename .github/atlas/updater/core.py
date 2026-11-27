@@ -37,6 +37,15 @@ class RootNotFound(UpdaterError):
     pass
 
 
+def ensure_free_space(path: Path, needed: int, what: str) -> None:
+    free = shutil.disk_usage(path).free
+    if free < needed:
+        raise UpdaterError(
+            f"No hay espacio suficiente para {what}: hacen falta {needed / 2**30:.1f} GB libres "
+            f"en {path.anchor or path} y hay {free / 2**30:.1f} GB. Libera espacio y vuelve a intentarlo. "
+            "No se modificó nada.")
+
+
 def vtuple(text: str) -> tuple[int, ...]:
     return tuple(int(n) for n in re.findall(r"\d+", text or ""))
 
@@ -468,6 +477,9 @@ class Updater:
             self.log(f"Todo está al día ({plan.local.version}).", "ok")
             return plan.local.version
         self.wait_idle()
+        # Downloads + the official package written in place + _internal staging + host backup.
+        ensure_free_space(self.root, (2_500 if plan.needs_official else 800) * 2**20,
+                          "esta actualización")
         work = Path(tempfile.mkdtemp(prefix="atlas-updater-"))
         try:
             host_zip: Path | None = None
@@ -504,39 +516,72 @@ class Updater:
 
     # --------------------------------------------------------------- installs
     def apply_official(self, zip_path: Path) -> None:
-        work = Path(tempfile.mkdtemp(prefix="bbport-official-"))
-        try:
-            self.extract(zip_path, work, "Extrayendo bbport oficial")
-            pkg = work
-            if not (pkg / "Bloodborne.exe").is_file() and (pkg / "bbport-windows" / "Bloodborne.exe").is_file():
-                pkg = pkg / "bbport-windows"
-            if not (pkg / "Bloodborne.exe").is_file() or not (pkg / "_internal" / "base_library.zip").is_file():
-                raise UpdaterError("El archivo oficial descargado no contiene una instalación completa de bbport.")
-            for carry in ("patches", "fsr4_shaders"):
-                old_dir, new_dir = self.root / carry, pkg / carry
-                if old_dir.is_dir():
-                    for src in old_dir.rglob("*"):
-                        if src.is_file():
-                            dst = new_dir / src.relative_to(old_dir)
-                            if not dst.exists():
-                                dst.parent.mkdir(parents=True, exist_ok=True)
-                                shutil.copy2(src, dst)
-            entries = [e for e in pkg.iterdir() if e.name.lower() not in PRESERVE]
-            order = {"bloodborne.exe": 2, "_internal": 1}
-            entries.sort(key=lambda e: order.get(e.name.lower(), 0))
-            total = len(entries)
-            for index, entry in enumerate(entries, 1):
-                self.progress(index / max(total, 1), f"Copiando {entry.name}")
-                dest = self.root / entry.name
-                if entry.is_dir():
-                    if dest.exists():
-                        shutil.rmtree(dest)
-                    shutil.copytree(entry, dest)
+        """Puts the official package over the installation without deleting anything first.
+
+        Files are streamed from the ZIP straight into place (no temporary extraction), so a full
+        disk stops the copy with the old files still there. _internal is staged beside the
+        installation and swapped by renaming; Bloodborne.exe and bbport-files.json go in last,
+        and every hash of the official manifest is checked at the end."""
+        with zipfile.ZipFile(zip_path) as archive:
+            members = [i for i in archive.infolist() if not i.is_dir()]
+            prefix = ""
+            if not any(i.filename == "Bloodborne.exe" for i in members):
+                if any(i.filename == "bbport-windows/Bloodborne.exe" for i in members):
+                    prefix = "bbport-windows/"
+            names = {i.filename for i in members}
+            for required in ("Bloodborne.exe", "_internal/base_library.zip", "bbport-files.json"):
+                if prefix + required not in names:
+                    raise UpdaterError("El archivo oficial descargado no contiene una instalación completa de bbport.")
+            needed = sum(i.file_size for i in members) + 300 * 1024 * 1024
+            ensure_free_space(self.root, needed, "actualizar bbport")
+
+            stage = self.root / ".atlas-update"
+            shutil.rmtree(stage, ignore_errors=True)
+            new_internal = stage / "_internal"
+            last: list[tuple[zipfile.ZipInfo, str]] = []
+            total = len(members)
+            for index, info in enumerate(members, 1):
+                if not info.filename.startswith(prefix):
+                    continue
+                rel = info.filename[len(prefix):]
+                top = rel.split("/")[0]
+                if top.lower() in PRESERVE:
+                    continue
+                if rel in ("Bloodborne.exe", "bbport-files.json"):
+                    last.append((info, rel))
+                    continue
+                if top == "_internal":
+                    dest = new_internal / rel[len("_internal/"):]
                 else:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(entry, dest)
-        finally:
-            shutil.rmtree(work, ignore_errors=True)
+                    dest = self.root / rel
+                    if top in ("patches", "fsr4_shaders") and dest.exists():
+                        continue  # the player's own patch/shader files stay as they are
+                if index % 25 == 0:
+                    self.progress(index / max(total, 1), f"Copiando {rel}")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with archive.open(info) as src, open(dest, "wb") as out:
+                    shutil.copyfileobj(src, out, 1 << 20)
+
+            old_internal = stage / "_internal-old"
+            if (self.root / "_internal").is_dir():
+                (self.root / "_internal").rename(old_internal)
+            try:
+                new_internal.rename(self.root / "_internal")
+            except OSError:
+                if old_internal.is_dir():
+                    old_internal.rename(self.root / "_internal")
+                raise
+            for info, rel in last:
+                with archive.open(info) as src, open(self.root / rel, "wb") as out:
+                    shutil.copyfileobj(src, out, 1 << 20)
+        shutil.rmtree(stage, ignore_errors=True)
+
+        manifest = json.loads((self.root / "bbport-files.json").read_text(encoding="utf-8-sig"))
+        bad = [name for name, digest in (manifest.get("files") or {}).items()
+               if not (self.root / name).is_file() or sha256_file(self.root / name) != digest]
+        if bad:
+            raise UpdaterError("bbport oficial quedó incompleto (" + ", ".join(bad[:5]) +
+                               "). Libera espacio y vuelve a ejecutar el actualizador.")
 
     def apply_host(self, zip_path: Path, host_version: str, force: bool = False) -> None:
         work = Path(tempfile.mkdtemp(prefix="atlas-host-"))
