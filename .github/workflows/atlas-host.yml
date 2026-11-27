@@ -158,11 +158,13 @@ jobs:
           export NINJAFLAGS="-j 4"
           df -h /c /d 2>/dev/null || true
           set +e
-          bash build.sh
+          bash -x build.sh > build-step.log 2>&1
           code=$?
           set -e
           echo "build.sh exit=$code"
-          if [ $code -ne 0 ]; then tail -100 out/gpu-build.log 2>/dev/null; fi
+          command -v ninja cp tail grep cmake clang
+          wc -c build-step.log out/gpu-build.log 2>&1
+          tail -60 build-step.log
           exit $code
 
       - name: Upload build log on failure
