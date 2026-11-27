@@ -1,6 +1,6 @@
 # Hunter's Atlas Updater for bbport (Windows)
 
-`HuntersAtlasUpdater.exe` keeps **bbport for Windows** and the **Hunter's Atlas** native-mod host synchronized without compiling anything on your PC. It is a self-contained graphical app (Python + Tkinter, the same stack bbport's own launcher uses): no PowerShell, no execution-policy prompts, no console window.
+`HuntersAtlasUpdater.exe` (English and Spanish, following the Windows language; `--lang en|es` overrides it) keeps **bbport for Windows** and the **Hunter's Atlas** native-mod host synchronized without compiling anything on your PC. It is a self-contained graphical app (Python + Tkinter, the same stack bbport's own launcher uses): no PowerShell, no execution-policy prompts, no console window.
 
 `Update-Hunters-Atlas.bat` (`update-atlas.ps1`) remains as a fallback for anyone who prefers scripts.
 

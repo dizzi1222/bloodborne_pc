@@ -283,7 +283,7 @@ def build_updater_exe(ci_dir: Path, repo_root: Path, venv_py: Path) -> Path | No
         "--windowed", "--log-level", "WARN", "--name", "HuntersAtlasUpdater",
         "--distpath", str(out_dir), "--workpath", str(work_dir),
         "--specpath", str(work_dir), "--paths", str(updater_dir),
-        "--hidden-import", "core", "--hidden-import", "gui",
+        "--hidden-import", "core", "--hidden-import", "gui", "--hidden-import", "i18n",
     ]
     icon = repo_root / "launcher" / "bloodborne.ico"
     if icon.is_file():

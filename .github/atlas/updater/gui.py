@@ -12,6 +12,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 import core
+from i18n import tr
 
 BG = "#0f0d0b"
 PANEL = "#191512"
@@ -80,7 +81,7 @@ class App:
 
     # ------------------------------------------------------------------- ui
     def _build(self) -> None:
-        self.win.title("Hunter's Atlas — Actualizador")
+        self.win.title(tr("Hunter's Atlas — Actualizador", "Hunter's Atlas — Updater"))
         self.win.configure(bg=BG)
         self.win.geometry("780x660")
         self.win.minsize(720, 600)
@@ -94,7 +95,7 @@ class App:
         header = tk.Frame(self.win, bg=BG, padx=26, pady=18)
         header.pack(fill="x")
         tk.Label(header, text="HUNTER'S ATLAS", bg=BG, fg=GOLD, font=FONT_TITLE).pack(anchor="w")
-        tk.Label(header, text="Actualizador de bbport · Bloodborne", bg=BG, fg=MUTED,
+        tk.Label(header, text=tr("Actualizador de bbport · Bloodborne", "bbport · Bloodborne updater"), bg=BG, fg=MUTED,
                  font=FONT_BODY).pack(anchor="w", pady=(2, 0))
         tk.Frame(self.win, bg=LINE, height=1).pack(fill="x", padx=26)
 
@@ -104,7 +105,7 @@ class App:
         card = tk.Frame(body, bg=PANEL, highlightbackground=LINE, highlightthickness=1)
         card.pack(fill="x")
         self.status: dict[str, tk.Label] = {}
-        cells = (("version", "INSTALACIÓN"), ("host", "HOST ATLAS"), ("mod", "MOD"))
+        cells = (("version", tr("INSTALACIÓN", "INSTALLATION")), ("host", tr("HOST ATLAS", "ATLAS HOST")), ("mod", "MOD"))
         for col, (key, caption) in enumerate(cells):
             cell = tk.Frame(card, bg=PANEL, padx=16, pady=12)
             cell.grid(row=0, column=col, sticky="nsew")
@@ -118,21 +119,21 @@ class App:
         plan_card.pack(fill="x", pady=(12, 0))
         inner = tk.Frame(plan_card, bg=PANEL, padx=16, pady=12)
         inner.pack(fill="x")
-        self.latest = self._row(inner, "Última versión oficial de bbport")
-        self.host_target = self._row(inner, "Último host Atlas compatible")
-        self.summary = tk.Label(plan_card, text="Buscando la última versión…", bg=PANEL, fg=MUTED,
+        self.latest = self._row(inner, tr("Última versión oficial de bbport", "Latest official bbport"))
+        self.host_target = self._row(inner, tr("Último host Atlas compatible", "Latest compatible Atlas host"))
+        self.summary = tk.Label(plan_card, text=tr("Buscando la última versión…", "Looking for the latest version…"), bg=PANEL, fg=MUTED,
                                 font=FONT_BODY, wraplength=690, justify="left", padx=16, pady=12)
         self.summary.pack(fill="x")
 
         buttons = tk.Frame(body, bg=BG)
         buttons.pack(fill="x", pady=(14, 0))
-        self.btn_check = self._button(buttons, "Buscar actualización", self.check, secondary=True)
+        self.btn_check = self._button(buttons, tr("Buscar actualización", "Check for updates"), self.check, secondary=True)
         self.btn_check.pack(side="left")
-        self.btn_update = self._button(buttons, "Actualizar", self.update, primary=True)
+        self.btn_update = self._button(buttons, tr("Actualizar", "Update"), self.update, primary=True)
         self.btn_update.pack(side="left", padx=8)
-        self.btn_restore = self._button(buttons, "Restaurar backup", self.restore, secondary=True)
+        self.btn_restore = self._button(buttons, tr("Restaurar backup", "Restore backup"), self.restore, secondary=True)
         self.btn_restore.pack(side="left")
-        self.btn_folder = self._button(buttons, "Abrir carpeta", self.open_folder, secondary=True)
+        self.btn_folder = self._button(buttons, tr("Abrir carpeta", "Open folder"), self.open_folder, secondary=True)
         self.btn_folder.pack(side="right")
         self.btn_update.configure(state="disabled")
 
@@ -141,7 +142,7 @@ class App:
         self.progress = ttk.Progressbar(progress_row, style="Gold.Horizontal.TProgressbar",
                                         mode="determinate", maximum=100)
         self.progress.pack(fill="x")
-        self.progress_label = tk.Label(body, text="Listo.", bg=BG, fg=MUTED, font=FONT_SMALL)
+        self.progress_label = tk.Label(body, text=tr("Listo.", "Ready."), bg=BG, fg=MUTED, font=FONT_SMALL)
         self.progress_label.pack(anchor="w", pady=(4, 0))
 
         log_frame = tk.Frame(body, bg=INK, highlightbackground=LINE, highlightthickness=1)
@@ -159,8 +160,10 @@ class App:
         self.log.tag_configure("error", foreground=RED)
         self.log.tag_configure("muted", foreground=MUTED)
 
-        tk.Label(body, text="Las partidas, ajustes, mods y archivos FSR/DLSS/Seamless se conservan. "
-                            "Cada cambio crea un backup host-backup-atlas-*.",
+        tk.Label(body, text=tr("Las partidas, ajustes, mods y archivos FSR/DLSS/Seamless se conservan. "
+                               "Cada cambio crea un backup host-backup-atlas-*.",
+                               "Saves, settings, mods and FSR/DLSS/Seamless files are kept. "
+                               "Every change creates a host-backup-atlas-* backup."),
                  bg=BG, fg=MUTED, font=FONT_SMALL, wraplength=700, justify="left").pack(
             anchor="w", pady=(10, 0))
 
@@ -228,7 +231,7 @@ class App:
                     self.check(log_note=False)
                 elif kind == "restored":
                     self.set_busy(False)
-                    self.set_progress(1.0, f"Restaurado a {payload}")
+                    self.set_progress(1.0, tr(f"Restaurado a {payload}", f"Restored to {payload}"))
                     self.check(log_note=False)
                 elif kind == "error":
                     self.set_busy(False)
@@ -245,10 +248,10 @@ class App:
             self.root_path = core.resolve_root(self.port or load_port_pref() or None)
             save_port_pref(self.root_path)
             self.updater = core.Updater(self.root_path, self._log_threadsafe, self._progress_threadsafe)
-            self.write(f"Instalación detectada: {self.root_path}", "muted")
+            self.write(tr(f"Instalación detectada: {self.root_path}", f"Installation found: {self.root_path}"), "muted")
             self.check()
         except core.RootNotFound:
-            chosen = filedialog.askdirectory(title="Selecciona la carpeta bbport-windows")
+            chosen = filedialog.askdirectory(title=tr("Selecciona la carpeta bbport-windows", "Select the bbport-windows folder"))
             if not chosen:
                 self.win.destroy()
                 return
@@ -275,9 +278,9 @@ class App:
         if self.busy or not self.updater:
             return
         self.set_busy(True)
-        self.set_progress(-1, "Consultando GitHub…")
+        self.set_progress(-1, tr("Consultando GitHub…", "Checking GitHub…"))
         if log_note:
-            self.write("Buscando actualizaciones…", "muted")
+            self.write(tr("Buscando actualizaciones…", "Checking for updates…"), "muted")
 
         def work():
             try:
@@ -292,27 +295,27 @@ class App:
         self.plan = plan
         local = plan.local
         self.status["version"].configure(text=local.version or "—")
-        self.status["host"].configure(text="Activo" if local.host_intact else "No aplicado",
+        self.status["host"].configure(text=tr("Activo", "Active") if local.host_intact else tr("No aplicado", "Not applied"),
                                       fg=GREEN if local.host_intact else AMBER)
-        self.status["mod"].configure(text="Instalado" if local.mod_installed else "No instalado",
+        self.status["mod"].configure(text=tr("Instalado", "Installed") if local.mod_installed else tr("No instalado", "Not installed"),
                                      fg=GREEN if local.mod_installed else MUTED)
         self.latest.configure(text=plan.latest_upstream.version if plan.latest_upstream else "—")
         self.host_target.configure(text=plan.best_host.host_version if plan.best_host else "—")
-        self.set_progress(0.0, "Listo.")
+        self.set_progress(0.0, tr("Listo.", "Ready."))
         if plan.up_to_date:
-            self.summary.configure(text=f"Todo está al día. Versión activa: {local.version}.", fg=GREEN)
-            self.btn_update.configure(state="disabled", text="Actualizar")
+            self.summary.configure(text=tr(f"Todo está al día. Versión activa: {local.version}.", f"Everything is up to date. Active version: {local.version}."), fg=GREEN)
+            self.btn_update.configure(state="disabled", text=tr("Actualizar", "Update"))
             return
         self.btn_update.configure(state="normal")
-        self.btn_update.configure(text=f"Actualizar a {plan.target_version}"
-                                  if (plan.needs_official or plan.needs_host) else "Instalar mod")
+        self.btn_update.configure(text=tr(f"Actualizar a {plan.target_version}", f"Update to {plan.target_version}")
+                                  if (plan.needs_official or plan.needs_host) else tr("Instalar mod", "Install mod"))
         pieces = []
         if plan.needs_official and plan.matching_upstream:
-            pieces.append(f"Se actualizará bbport {local.base_version} → {plan.matching_upstream.version}")
+            pieces.append(tr(f"Se actualizará bbport {local.base_version} → {plan.matching_upstream.version}", f"bbport {local.base_version} → {plan.matching_upstream.version} will be updated"))
         if plan.needs_host:
-            pieces.append(f"y se aplicará el host {plan.target_version}")
+            pieces.append(tr(f"Se aplicará el host {plan.target_version}", f"Host {plan.target_version} will be applied"))
         if plan.needs_mod and plan.latest_mod:
-            pieces.append(f"Se instalará el mod Hunter's Atlas {plan.latest_mod.mod_version}")
+            pieces.append(tr(f"Se instalará el mod Hunter's Atlas {plan.latest_mod.mod_version}", f"Hunter's Atlas mod {plan.latest_mod.mod_version} will be installed"))
         self.summary.configure(text=". ".join(pieces) + ".", fg=TEXT)
         if plan.warning:
             self.write(plan.warning, "warn")
@@ -322,8 +325,8 @@ class App:
             return
         plan = self.plan
         self.set_busy(True)
-        self.set_progress(0.0, "Preparando…")
-        self.write(f"Actualizando a {plan.target_version}…")
+        self.set_progress(0.0, tr("Preparando…", "Preparing…"))
+        self.write(tr(f"Actualizando a {plan.target_version}…", f"Updating to {plan.target_version}…"))
 
         def work():
             try:
@@ -338,12 +341,14 @@ class App:
         if self.busy or not self.updater:
             return
         if not messagebox.askyesno(
-                "Restaurar backup",
-                "Se restaurará el último backup host-backup-atlas-* y se deshará el último "
-                "cambio de host.\n\n¿Continuar?"):
+                tr("Restaurar backup", "Restore backup"),
+                tr("Se restaurará el último backup host-backup-atlas-* y se deshará el último "
+                   "cambio de host.\n\n¿Continuar?",
+                   "The latest host-backup-atlas-* backup will be restored, undoing the last "
+                   "host change.\n\nContinue?")):
             return
         self.set_busy(True)
-        self.set_progress(-1, "Restaurando…")
+        self.set_progress(-1, tr("Restaurando…", "Restoring…"))
 
         def work():
             try:
@@ -362,7 +367,7 @@ class App:
 
     def _on_close(self) -> None:
         if self.busy and not messagebox.askyesno(
-                "Hunter's Atlas", "Hay una actualización en curso. ¿Cerrar de todos modos?"):
+                "Hunter's Atlas", tr("Hay una actualización en curso. ¿Cerrar de todos modos?", "An update is in progress. Close anyway?")):
             return
         self.win.destroy()
 

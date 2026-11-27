@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 
 import core
+import i18n
+from i18n import tr
 
 
 def emit(text: str = "") -> None:
@@ -42,15 +44,17 @@ def plan_dict(plan: core.Plan) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="HuntersAtlasUpdater")
-    parser.add_argument("--port", help="ruta a bbport-windows")
-    parser.add_argument("--check", action="store_true", help="solo consultar, sin modificar nada")
-    parser.add_argument("--json", metavar="RUTA", help="guardar el resultado de --check en JSON")
-    parser.add_argument("--restore", action="store_true", help="restaurar el último backup de host")
+    parser.add_argument("--port", help="bbport-windows folder / carpeta bbport-windows")
+    parser.add_argument("--lang", choices=i18n.LANGS, help="es | en (default: Windows language)")
+    parser.add_argument("--check", action="store_true", help="only report, change nothing / solo consultar")
+    parser.add_argument("--json", metavar="RUTA", help="write the --check result as JSON / guardar en JSON")
+    parser.add_argument("--restore", action="store_true", help="restore the latest host backup / restaurar el último backup")
     parser.add_argument("--no-prerelease", action="store_true",
-                        help="ignorar hosts publicados como pre-release")
-    parser.add_argument("--force", action="store_true", help="forzar la reaplicación del host")
-    parser.add_argument("--skip-mod", action="store_true", help="no instalar el mod si falta")
+                        help="ignore pre-release hosts / ignorar pre-releases")
+    parser.add_argument("--force", action="store_true", help="re-apply the host / forzar la reaplicación del host")
+    parser.add_argument("--skip-mod", action="store_true", help="do not install the mod / no instalar el mod")
     args = parser.parse_args(argv)
+    i18n.set_language(args.lang)
 
     headless = args.check or args.restore
     try:
@@ -80,17 +84,17 @@ def main(argv: list[str] | None = None) -> int:
             data = plan_dict(plan)
             if args.json:
                 Path(args.json).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-            emit(f"Carpeta bbport:        {data['root']}")
-            emit(f"Versión instalada:     {data['version']}")
-            emit(f"Host Atlas íntegro:    {data['host_intact']}")
-            emit(f"Mod instalado:         {data['mod_installed']}")
-            emit(f"Última oficial bbport: {data['latest_upstream']}")
-            emit(f"Host compatible:       {data['best_host']}")
-            emit(f"Actualizar bbport:     {data['needs_official']}")
-            emit(f"Aplicar host Atlas:    {data['needs_host']}")
-            emit(f"Instalar mod Atlas:    {data['needs_mod']}")
+            emit(tr("Carpeta bbport:        ", "bbport folder:         ") + data['root'])
+            emit(tr("Versión instalada:     ", "Installed version:     ") + str(data['version']))
+            emit(tr("Host Atlas íntegro:    ", "Atlas host intact:     ") + str(data['host_intact']))
+            emit(tr("Mod instalado:         ", "Mod installed:         ") + str(data['mod_installed']))
+            emit(tr("Última oficial bbport: ", "Latest official bbport:") + " " * (0 if i18n.LANG == "es" else 1) + str(data['latest_upstream']))
+            emit(tr("Host compatible:       ", "Compatible host:       ") + str(data['best_host']))
+            emit(tr("Actualizar bbport:     ", "Update bbport:         ") + str(data['needs_official']))
+            emit(tr("Aplicar host Atlas:    ", "Apply Atlas host:      ") + str(data['needs_host']))
+            emit(tr("Instalar mod Atlas:    ", "Install Atlas mod:     ") + str(data['needs_mod']))
             if data["warning"]:
-                emit(f"AVISO: {data['warning']}")
+                emit(tr("AVISO: ", "WARNING: ") + data['warning'])
             return 0 if data["up_to_date"] else 10
         import gui
         return gui.run(args.port)

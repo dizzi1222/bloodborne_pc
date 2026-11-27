@@ -18,6 +18,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from i18n import tr
+
 FORK_REPO = "dizzi1222/bloodborne_pc"
 UPSTREAM_REPO = "Supermedo/bloodborne_pc"
 UA = "HuntersAtlas-Updater/2.0"
@@ -41,9 +43,12 @@ def ensure_free_space(path: Path, needed: int, what: str) -> None:
     free = shutil.disk_usage(path).free
     if free < needed:
         raise UpdaterError(
-            f"No hay espacio suficiente para {what}: hacen falta {needed / 2**30:.1f} GB libres "
-            f"en {path.anchor or path} y hay {free / 2**30:.1f} GB. Libera espacio y vuelve a intentarlo. "
-            "No se modificó nada.")
+            tr(f"No hay espacio suficiente para {what}: hacen falta {needed / 2**30:.1f} GB libres "
+               f"en {path.anchor or path} y hay {free / 2**30:.1f} GB. Libera espacio y vuelve a intentarlo. "
+               "No se modificó nada.",
+               f"Not enough disk space to {what}: {needed / 2**30:.1f} GB free are needed "
+               f"on {path.anchor or path} and there are {free / 2**30:.1f} GB. Free some space and try again. "
+               "Nothing was changed."))
 
 
 def vtuple(text: str) -> tuple[int, ...]:
@@ -98,8 +103,8 @@ def download(url: str, dest: Path, expected: str = "", progress=None) -> str:
             if expected and digest != expected.lower().removeprefix("sha256:"):
                 dest.unlink(missing_ok=True)
                 raise UpdaterError(
-                    f"SHA-256 no coincide para {dest.name}.\n"
-                    f"Esperado: {expected}\nRecibido: {digest}")
+                    tr(f"SHA-256 no coincide para {dest.name}.\nEsperado: {expected}\nRecibido: {digest}",
+                       f"SHA-256 mismatch for {dest.name}.\nExpected: {expected}\nGot: {digest}"))
             return digest
         except UpdaterError:
             raise
@@ -109,7 +114,7 @@ def download(url: str, dest: Path, expected: str = "", progress=None) -> str:
                 dest.unlink(missing_ok=True)
             if attempt == 3:
                 break
-    raise UpdaterError(f"No se pudo descargar {url}: {last_error}")
+    raise UpdaterError(tr(f"No se pudo descargar {url}: {last_error}", f"Could not download {url}: {last_error}"))
 
 
 def _hidden_run(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -121,7 +126,7 @@ def resolve_root(explicit: str | Path | None = None) -> Path:
     if explicit:
         root = Path(explicit).expanduser().resolve()
         if not (root / "bbport-files.json").is_file():
-            raise RootNotFound(f"No es una instalación de bbport: {root}")
+            raise RootNotFound(tr(f"No es una instalación de bbport: {root}", f"Not a bbport installation: {root}"))
         return root
     bases = []
     if getattr(sys, "frozen", False):
@@ -150,7 +155,7 @@ def resolve_root(explicit: str | Path | None = None) -> Path:
                 return Path(target).parent
     except Exception:
         pass
-    raise RootNotFound("No se encontró la carpeta de bbport. Selecciónala manualmente.")
+    raise RootNotFound(tr("No se encontró la carpeta de bbport. Selecciónala manualmente.", "The bbport folder was not found. Please select it."))
 
 
 def running_processes(root: Path) -> list[str]:
@@ -302,7 +307,7 @@ class Updater:
     def local_state(self) -> LocalState:
         manifest_path = self.root / "bbport-files.json"
         if not manifest_path.is_file():
-            raise UpdaterError(f"No se encontró bbport-files.json en {self.root}")
+            raise UpdaterError(tr(f"No se encontró bbport-files.json en {self.root}", f"bbport-files.json not found in {self.root}"))
         manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
         version = str(manifest.get("version", ""))
         match = re.match(r"^(\d+(?:\.\d+)*)-atlas\.(\d+)$", version)
@@ -393,11 +398,11 @@ class Updater:
         local = self.local_state()
         upstream = self.upstream_releases()
         if not upstream:
-            raise UpdaterError(f"No se encontraron releases oficiales de Windows en {self.upstream_repo}.")
+            raise UpdaterError(tr(f"No se encontraron releases oficiales de Windows en {self.upstream_repo}.", f"No official Windows releases found in {self.upstream_repo}."))
         latest = upstream[0]
         hosts, mods = self.fork_artifacts()
         if not hosts:
-            raise UpdaterError(f"No se encontraron paquetes host de Hunter's Atlas en {self.fork_repo}.")
+            raise UpdaterError(tr(f"No se encontraron paquetes host de Hunter's Atlas en {self.fork_repo}.", f"No Hunter's Atlas host packages found in {self.fork_repo}."))
         by_version = {u.version: u for u in upstream}
         best_host = next((h for h in hosts if h.base_version in by_version), hosts[0])
         matching = by_version.get(best_host.base_version)
@@ -406,16 +411,20 @@ class Updater:
         plan = Plan(local=local, latest_upstream=latest, best_host=best_host,
                     matching_upstream=matching, latest_mod=latest_mod)
         if vcmp(latest.vtuple, best_host.base_tuple) > 0:
-            plan.warning = (
+            plan.warning = tr(
                 f"bbport {latest.version} ya salió, pero el host de Hunter's Atlas para "
                 f"{latest.version} aún no está disponible. La última versión compatible con el mapa "
-                f"es {best_host.host_version}.")
+                f"es {best_host.host_version}.",
+                f"bbport {latest.version} is out, but the Hunter's Atlas host for {latest.version} "
+                f"is not available yet. The latest version that works with the map is {best_host.host_version}.")
         local_cmp = vcmp(vtuple(local.base_version), best_host.base_tuple)
         if local_cmp > 0:
             plan.up_to_date = True
-            plan.warning = (
+            plan.warning = tr(
                 f"Tu bbport local ({local.base_version}) es más nuevo que el último host Atlas "
-                f"disponible ({best_host.host_version}). No se aplicará un host más antiguo.")
+                f"disponible ({best_host.host_version}). No se aplicará un host más antiguo.",
+                f"Your bbport ({local.base_version}) is newer than the latest Atlas host "
+                f"({best_host.host_version}). An older host will not be applied.")
             return plan
         plan.needs_official = local_cmp < 0
         plan.needs_host = bool(force or plan.needs_official or not local.host_intact
@@ -432,9 +441,9 @@ class Updater:
         while update_mutex_held():
             if time.monotonic() >= deadline:
                 raise UpdaterError(
-                    f"El actualizador oficial de bbport sigue en curso después de {timeout} s.")
+                    tr(f"El actualizador oficial de bbport sigue en curso después de {timeout} s.", f"The official bbport updater is still running after {timeout} s."))
             if not told_mutex:
-                self.log("Esperando a que termine el actualizador oficial de bbport…", "warn")
+                self.log(tr("Esperando a que termine el actualizador oficial de bbport…", "Waiting for the official bbport updater to finish…"), "warn")
                 told_mutex = True
             time.sleep(0.5)
         while True:
@@ -443,10 +452,10 @@ class Updater:
                 return
             if time.monotonic() >= deadline:
                 raise UpdaterError(
-                    "Cierra Bloodborne y el launcher antes de actualizar "
-                    f"(en ejecución: {', '.join(names)}).")
+                    tr(f"Cierra Bloodborne y el launcher antes de actualizar (en ejecución: {', '.join(names)}).",
+                       f"Close Bloodborne and its launcher before updating (running: {', '.join(names)})."))
             if not told_proc:
-                self.log(f"Esperando a que se cierren: {', '.join(names)} …", "warn")
+                self.log(tr(f"Esperando a que se cierren: {', '.join(names)} …", f"Waiting for these to close: {', '.join(names)} …"), "warn")
                 told_proc = True
             time.sleep(1.0)
 
@@ -457,29 +466,29 @@ class Updater:
             meta = http_json(host.meta_url)
             return str(meta.get("zip_sha256") or "").lower()
         except Exception as exc:
-            self.log(f"No se pudo leer atlas-host.json: {exc}", "warn")
+            self.log(tr(f"No se pudo leer atlas-host.json: {exc}", f"Could not read atlas-host.json: {exc}"), "warn")
             return ""
 
     def _fetch(self, url: str, name: str, sha: str, label: str, work: Path) -> Path:
         dest = work / name
         size_mb = 0
         if not sha:
-            raise UpdaterError(f"{label}: el release no publica SHA-256; se cancela por seguridad.")
-        self.log(f"Descargando {label}…")
+            raise UpdaterError(tr(f"{label}: el release no publica SHA-256; se cancela por seguridad.", f"{label}: the release has no SHA-256; cancelled for safety."))
+        self.log(tr(f"Descargando {label}…", f"Downloading {label}…"))
         download(url, dest, sha, lambda frac, done, total: self.progress(
             frac, f"{label}: {done // (1 << 20)} / {total // (1 << 20)} MB"))
         size_mb = dest.stat().st_size // (1 << 20)
-        self.log(f"SHA-256 verificado ({size_mb} MB).", "ok")
+        self.log(tr(f"SHA-256 verificado ({size_mb} MB).", f"SHA-256 verified ({size_mb} MB)."), "ok")
         return dest
 
     def run(self, plan: Plan, force: bool = False) -> str:
         if not plan.has_work:
-            self.log(f"Todo está al día ({plan.local.version}).", "ok")
+            self.log(tr(f"Todo está al día ({plan.local.version}).", f"Everything is up to date ({plan.local.version})."), "ok")
             return plan.local.version
         self.wait_idle()
         # Downloads + the official package written in place + _internal staging + host backup.
         ensure_free_space(self.root, (2_500 if plan.needs_official else 800) * 2**20,
-                          "esta actualización")
+                          tr("esta actualización", "run this update"))
         work = Path(tempfile.mkdtemp(prefix="atlas-updater-"))
         try:
             host_zip: Path | None = None
@@ -487,29 +496,32 @@ class Updater:
             if plan.needs_host and plan.best_host:
                 host = plan.best_host
                 host_zip = self._fetch(host.zip_url, host.zip_name, self._meta_sha(host),
-                                       f"host Atlas {host.host_version}", work)
+                                       tr(f"host Atlas {host.host_version}", f"Atlas host {host.host_version}"), work)
             if plan.needs_official:
                 official = plan.matching_upstream
                 if not official:
                     raise UpdaterError(
-                        f"No se encontró el paquete oficial Bloodborne-Windows.zip para "
-                        f"{plan.best_host.base_version if plan.best_host else '?'}.")
+                        tr("No se encontró el paquete oficial Bloodborne-Windows.zip para ",
+                           "Official Bloodborne-Windows.zip package not found for ")
+                        + f"{plan.best_host.base_version if plan.best_host else '?'}.")
                 official_zip = self._fetch(official.zip_url, f"Bloodborne-Windows-{official.version}.zip",
-                                           official.zip_sha, f"bbport oficial {official.version}", work)
+                                           official.zip_sha, tr(f"bbport oficial {official.version}", f"official bbport {official.version}"), work)
             if official_zip:
-                self.log(f"Actualizando bbport base a {plan.matching_upstream.version} "
-                         f"(conservando partidas, ajustes y mods)…")
+                self.log(tr(f"Actualizando bbport base a {plan.matching_upstream.version} "
+                            "(conservando partidas, ajustes y mods)…",
+                            f"Updating base bbport to {plan.matching_upstream.version} "
+                            "(keeping saves, settings and mods)…"))
                 self.apply_official(official_zip)
-                self.log("bbport base actualizado.", "ok")
+                self.log(tr("bbport base actualizado.", "Base bbport updated."), "ok")
             if host_zip and plan.best_host:
-                self.log(f"Aplicando host Atlas {plan.best_host.host_version}…")
+                self.log(tr(f"Aplicando host Atlas {plan.best_host.host_version}…", f"Applying Atlas host {plan.best_host.host_version}…"))
                 self.apply_host(host_zip, plan.best_host.host_version, force=force)
-                self.log("Host Atlas aplicado.", "ok")
+                self.log(tr("Host Atlas aplicado.", "Atlas host applied."), "ok")
             if plan.needs_mod and plan.latest_mod:
                 self.install_mod(plan.latest_mod, work)
             target = plan.target_version
-            self.log(f"Actualización completada. Versión activa: {target}", "ok")
-            self.progress(1.0, "Listo")
+            self.log(tr(f"Actualización completada. Versión activa: {target}", f"Update complete. Active version: {target}"), "ok")
+            self.progress(1.0, tr("Listo", "Done"))
             return target
         finally:
             shutil.rmtree(work, ignore_errors=True)
@@ -531,9 +543,9 @@ class Updater:
             names = {i.filename for i in members}
             for required in ("Bloodborne.exe", "_internal/base_library.zip", "bbport-files.json"):
                 if prefix + required not in names:
-                    raise UpdaterError("El archivo oficial descargado no contiene una instalación completa de bbport.")
+                    raise UpdaterError(tr("El archivo oficial descargado no contiene una instalación completa de bbport.", "The downloaded official archive is not a complete bbport installation."))
             needed = sum(i.file_size for i in members) + 300 * 1024 * 1024
-            ensure_free_space(self.root, needed, "actualizar bbport")
+            ensure_free_space(self.root, needed, tr("actualizar bbport", "update bbport"))
 
             stage = self.root / ".atlas-update"
             shutil.rmtree(stage, ignore_errors=True)
@@ -557,7 +569,7 @@ class Updater:
                     if top in ("patches", "fsr4_shaders") and dest.exists():
                         continue  # the player's own patch/shader files stay as they are
                 if index % 25 == 0:
-                    self.progress(index / max(total, 1), f"Copiando {rel}")
+                    self.progress(index / max(total, 1), tr(f"Copiando {rel}", f"Copying {rel}"))
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 with archive.open(info) as src, open(dest, "wb") as out:
                     shutil.copyfileobj(src, out, 1 << 20)
@@ -580,13 +592,15 @@ class Updater:
         bad = [name for name, digest in (manifest.get("files") or {}).items()
                if not (self.root / name).is_file() or sha256_file(self.root / name) != digest]
         if bad:
-            raise UpdaterError("bbport oficial quedó incompleto (" + ", ".join(bad[:5]) +
-                               "). Libera espacio y vuelve a ejecutar el actualizador.")
+            raise UpdaterError(tr("bbport oficial quedó incompleto (", "Official bbport is incomplete (") +
+                               ", ".join(bad[:5]) +
+                               tr("). Libera espacio y vuelve a ejecutar el actualizador.",
+                                  "). Free some space and run the updater again."))
 
     def apply_host(self, zip_path: Path, host_version: str, force: bool = False) -> None:
         work = Path(tempfile.mkdtemp(prefix="atlas-host-"))
         try:
-            self.extract(zip_path, work, f"Extrayendo host {host_version}")
+            self.extract(zip_path, work, tr(f"Extrayendo host {host_version}", f"Extracting host {host_version}"))
             pkg = work
             manifest_path = self.root / "bbport-files.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
@@ -595,11 +609,13 @@ class Updater:
             expected_base = re.sub(r"-atlas\.\d+$", "", host_version)
             if not force and current_base and expected_base and current_base != expected_base:
                 raise UpdaterError(
-                    f"El host {host_version} es para bbport {expected_base}, pero la instalación "
-                    f"está en {current}. Actualiza bbport y el host juntos.")
+                    tr(f"El host {host_version} es para bbport {expected_base}, pero la instalación "
+                       f"está en {current}. Actualiza bbport y el host juntos.",
+                       f"Host {host_version} is for bbport {expected_base}, but the installation is "
+                       f"{current}. Update bbport and the host together."))
             for rel in ("bin/bb-probe.exe", "run.py", "scripts/mods.py", "scripts/native_mods.py"):
                 if not (pkg / rel).is_file():
-                    raise UpdaterError(f"El paquete host está incompleto: falta {rel}.")
+                    raise UpdaterError(tr(f"El paquete host está incompleto: falta {rel}.", f"The host package is incomplete: {rel} is missing."))
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             backup = self.root / f"host-backup-atlas-{stamp}"
             suffix = 1
@@ -701,7 +717,7 @@ class Updater:
             }
             (backup / "restore-info.json").write_text(
                 json.dumps(restore, indent=2) + "\n", encoding="utf-8")
-            self.log(f"Backup guardado en {backup.name}", "muted")
+            self.log(tr(f"Backup guardado en {backup.name}", f"Backup saved in {backup.name}"), "muted")
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
@@ -709,7 +725,7 @@ class Updater:
         zip_path = self._fetch(mod.zip_url, mod.zip_name, mod.zip_sha,
                                f"mod Hunter's Atlas {mod.mod_version}", work)
         extracted = work / "mod"
-        self.extract(zip_path, extracted, "Extrayendo mod")
+        self.extract(zip_path, extracted, tr("Extrayendo mod", "Extracting mod"))
         src = extracted
         if not (src / "bbport-native-mod.json").is_file() and \
                 (src / MOD_FOLDER / "bbport-native-mod.json").is_file():
@@ -722,16 +738,16 @@ class Updater:
         if saved is not None:
             settings.parent.mkdir(parents=True, exist_ok=True)
             settings.write_text(saved, encoding="utf-8")
-        self.log(f"Mod Hunter's Atlas {mod.mod_version} instalado.", "ok")
+        self.log(tr(f"Mod Hunter's Atlas {mod.mod_version} instalado.", f"Hunter's Atlas mod {mod.mod_version} installed."), "ok")
 
     def restore(self) -> str:
         self.wait_idle()
         backups = sorted((p for p in self.root.glob("host-backup-atlas-*") if p.is_dir()),
                          key=lambda p: p.name, reverse=True)
         if not backups:
-            raise UpdaterError(f"No se encontró ningún backup host-backup-atlas-* en {self.root}.")
+            raise UpdaterError(tr(f"No se encontró ningún backup host-backup-atlas-* en {self.root}.", f"No host-backup-atlas-* backup found in {self.root}."))
         latest = backups[0]
-        self.log(f"Restaurando backup {latest.name}…")
+        self.log(tr(f"Restaurando backup {latest.name}…", f"Restoring backup {latest.name}…"))
         info_path = latest / "restore-info.json"
         info = json.loads(info_path.read_text(encoding="utf-8-sig")) if info_path.is_file() else {}
         if info.get("replaced_internal") and (latest / "_internal").is_dir():
@@ -754,7 +770,7 @@ class Updater:
             shutil.copy2(src, dst)
         manifest = json.loads((self.root / "bbport-files.json").read_text(encoding="utf-8-sig"))
         version = str(manifest.get("version", ""))
-        self.log(f"Restauración completada. Versión actual: {version}", "ok")
+        self.log(tr(f"Restauración completada. Versión actual: {version}", f"Restore complete. Current version: {version}"), "ok")
         return version
 
     def extract(self, zip_path: Path, dest: Path, label: str) -> None:
