@@ -1,6 +1,8 @@
 # Hunter's Atlas Updater for bbport (Windows)
 
-`Update-Hunters-Atlas.bat` (`update-atlas.ps1`) keeps **bbport for Windows** and the **Hunter's Atlas** native-mod host synchronized without compiling anything on your PC.
+`HuntersAtlasUpdater.exe` keeps **bbport for Windows** and the **Hunter's Atlas** native-mod host synchronized without compiling anything on your PC. It is a self-contained graphical app (Python + Tkinter, the same stack bbport's own launcher uses): no PowerShell, no execution-policy prompts, no console window.
+
+`Update-Hunters-Atlas.bat` (`update-atlas.ps1`) remains as a fallback for anyone who prefers scripts.
 
 ## How it works
 
@@ -13,9 +15,18 @@
 
 ## Usage
 
-### Double-click (recommended)
+### HuntersAtlasUpdater.exe (recommended)
 
-Place `Update-Hunters-Atlas.bat` and `update-atlas.ps1` inside your `bbport-windows` folder (or inside `bbport-windows\mods\Hunter's Atlas\`) and double-click **`Update-Hunters-Atlas.bat`**.
+1. Download `Hunters-Atlas-Updater.zip` from the [Atlas host release](https://github.com/dizzi1222/bloodborne_pc/releases).
+2. Extract it anywhere — inside `bbport-windows` or `bbport-windows\mods\Hunter's Atlas` is ideal, because the app auto-detects the installation from its own location.
+3. Double-click **`HuntersAtlasUpdater.exe`**. It shows your installed version, whether the Atlas host is active, the latest official bbport, and the newest compatible host. Press **Actualizar a …** when offered.
+4. Use **Restaurar backup** to roll back the last host change.
+
+The executable can also be run with `--check` (read-only report) or `--restore` from a terminal, and it writes `--json <path>` when you want a machine-readable status.
+
+### Update-Hunters-Atlas.bat
+
+Place `Update-Hunters-Atlas.bat` next to `HuntersAtlasUpdater.exe` (or in `bbport-windows\mods\Hunter's Atlas\updater\`) and double-click it. The `.bat` launches the `.exe` when present and otherwise falls back to PowerShell.
 
 ### PowerShell options
 

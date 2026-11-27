@@ -253,6 +253,35 @@ def zip_directory(source_dir: Path, zip_path: Path) -> None:
                 zf.write(file_path, arcname)
 
 
+def build_updater_exe(ci_dir: Path, repo_root: Path, venv_py: Path) -> Path | None:
+    """Freeze the Tkinter updater into a single HuntersAtlasUpdater.exe."""
+    updater_dir = ci_dir / "updater"
+    if not (updater_dir / "main.py").is_file():
+        print("Updater sources not found; skipping exe build", flush=True)
+        return None
+    out_dir = repo_root / "out" / "updater-dist"
+    work_dir = repo_root / "out" / "updater-work"
+    cmd = [
+        str(venv_py), "-m", "PyInstaller", "--noconfirm", "--clean", "--onefile",
+        "--windowed", "--log-level", "WARN", "--name", "HuntersAtlasUpdater",
+        "--distpath", str(out_dir), "--workpath", str(work_dir),
+        "--specpath", str(work_dir), "--paths", str(updater_dir),
+        "--hidden-import", "core", "--hidden-import", "gui",
+    ]
+    icon = repo_root / "launcher" / "bloodborne.ico"
+    if icon.is_file():
+        cmd += ["--icon", str(icon)]
+    version_file = updater_dir / "version_info.txt"
+    if version_file.is_file():
+        cmd += ["--version-file", str(version_file)]
+    cmd.append(str(updater_dir / "main.py"))
+    run(cmd)
+    exe = out_dir / "HuntersAtlasUpdater.exe"
+    if not exe.is_file():
+        raise RuntimeError(f"PyInstaller did not produce {exe}")
+    return exe
+
+
 def main() -> int:
     repo_root = Path.cwd().resolve()
     ci_dir = Path(os.environ["ATLAS_CI_DIR"]).resolve()
@@ -276,6 +305,8 @@ def main() -> int:
     win_python = find_windows_python314()
     print(f"Using Windows Python 3.14 at {win_python}")
     frozen_dir = freeze_launcher(repo_root, win_python)
+    venv_py = repo_root / "out" / "pyenv" / "Scripts" / "python.exe"
+    updater_exe = build_updater_exe(ci_dir, repo_root, venv_py)
 
     stage = repo_root / "out" / "atlas-host-stage"
     if stage.exists():
@@ -403,12 +434,17 @@ def main() -> int:
         src = ci_dir / fname
         if src.is_file():
             shutil.copy2(src, updater_stage / fname)
+    updater_exe_sha = ""
+    if updater_exe and updater_exe.is_file():
+        shutil.copy2(updater_exe, updater_stage / updater_exe.name)
+        updater_exe_sha = sha256_file(updater_stage / updater_exe.name)
     updater_zip_path = assets_dir / "Hunters-Atlas-Updater.zip"
     zip_directory(updater_stage, updater_zip_path)
     updater_zip_sha = sha256_file(updater_zip_path)
 
     host_meta["zip_sha256"] = host_zip_sha
     host_meta["updater_zip_sha256"] = updater_zip_sha
+    host_meta["updater_exe_sha256"] = updater_exe_sha
     (assets_dir / "atlas-host.json").write_text(json.dumps(host_meta, indent=2) + "\n", encoding="utf-8")
 
     sums_lines = [
@@ -417,6 +453,8 @@ def main() -> int:
         f"{probe_sha}  bin/bb-probe.exe",
         f"{launcher_sha}  Bloodborne.exe",
     ]
+    if updater_exe_sha:
+        sums_lines.insert(2, f"{updater_exe_sha}  HuntersAtlasUpdater.exe")
     (assets_dir / "SHA256SUMS.txt").write_text("\n".join(sums_lines) + "\n", encoding="utf-8")
 
     notes = (
@@ -428,11 +466,14 @@ def main() -> int:
         f"### Checksums (SHA-256)\n"
         f"- `{host_zip_path.name}`: `{host_zip_sha}`\n"
         f"- `Hunters-Atlas-Updater.zip`: `{updater_zip_sha}`\n"
+        f"- `HuntersAtlasUpdater.exe`: `{updater_exe_sha or 'see updater zip'}`\n"
         f"- `bin/bb-probe.exe`: `{probe_sha}`\n"
         f"- `Bloodborne.exe`: `{launcher_sha}`\n"
         f"- Official `Bloodborne-Windows.zip` (`{upstream_tag}`): `{target.get('upstream_zip_sha256') or 'see official release'}`\n\n"
         f"### How to update\n"
-        f"Run **`Update-Hunters-Atlas.bat`** inside your bbport or `mods\\Hunter's Atlas` folder (or download `Hunters-Atlas-Updater.zip`).\n"
+        f"Download **`Hunters-Atlas-Updater.zip`**, extract it anywhere and run "
+        f"**`HuntersAtlasUpdater.exe`** (no PowerShell, no policy prompts). "
+        f"It also works from `Update-Hunters-Atlas.bat` inside your bbport folder.\n"
     )
     (assets_dir / "RELEASE-NOTES.md").write_text(notes, encoding="utf-8")
     print(f"Packaged {host_zip_path.name} ({host_zip_path.stat().st_size / (1024*1024):.2f} MiB), sha256={host_zip_sha}")

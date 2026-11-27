@@ -2,12 +2,20 @@
 setlocal
 title Hunter's Atlas Updater for bbport
 set "SCRIPT_DIR=%~dp0"
+if exist "%SCRIPT_DIR%HuntersAtlasUpdater.exe" (
+    start "" "%SCRIPT_DIR%HuntersAtlasUpdater.exe"
+    exit /b 0
+)
+if exist "%SCRIPT_DIR%updater\HuntersAtlasUpdater.exe" (
+    start "" "%SCRIPT_DIR%updater\HuntersAtlasUpdater.exe"
+    exit /b 0
+)
 if exist "%SCRIPT_DIR%update-atlas.ps1" (
     set "PS_SCRIPT=%SCRIPT_DIR%update-atlas.ps1"
 ) else if exist "%SCRIPT_DIR%updater\update-atlas.ps1" (
     set "PS_SCRIPT=%SCRIPT_DIR%updater\update-atlas.ps1"
 ) else (
-    echo Could not find update-atlas.ps1 next to this .bat file.
+    echo Could not find HuntersAtlasUpdater.exe or update-atlas.ps1 next to this .bat file.
     pause
     exit /b 1
 )

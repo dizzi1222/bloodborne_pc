@@ -157,14 +157,20 @@ jobs:
           echo "MSYS2_WIN_ROOT=$(cygpath -w /)" >> "$GITHUB_ENV"
           export NINJAFLAGS="-j 4"
           df -h /c /d 2>/dev/null || true
+          # MSYS2's cp.exe aborts with exit 127 on this runner (silent DLL load
+          # failure). cmake already runs the build, so use it for the final copy.
+          sed -i 's|^    cp out/gpu/bb-probe.exe|    cmake -E copy_if_different out/gpu/bb-probe.exe|' build.sh
+          grep -n 'copy_if_different' build.sh || true
           set +e
           bash -x build.sh > build-step.log 2>&1
           code=$?
           set -e
           echo "build.sh exit=$code"
-          command -v ninja cp tail grep cmake clang
+          type -a cp cmake 2>&1 || true
+          ldd /usr/bin/cp 2>&1 || echo "ldd cp failed: $?"
+          ls -l out/gpu/bb-probe.exe out/gpu/bb-gpu-capabilities.exe out/gpu/bb-fg401-capabilities.exe out/gpu/bb-play.exe 2>&1 || true
           wc -c build-step.log out/gpu-build.log 2>&1
-          tail -60 build-step.log
+          tail -80 build-step.log
           exit $code
 
       - name: Upload build log on failure
@@ -172,7 +178,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gpu-build-log-${{ steps.target.outputs.host_version }}
-          path: out/gpu-build.log
+          path: |
+            out/gpu-build.log
+            build-step.log
           if-no-files-found: ignore
 
       - name: Freeze launcher & package Atlas host ZIP
