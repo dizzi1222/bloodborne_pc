@@ -111,7 +111,9 @@ def freeze_launcher(repo_root: Path, win_python: Path) -> Path:
 
     # Smoke-test that the frozen launcher bundle imports mods and native_mods
     smoke_script = repo_root / "out" / "check_native_mods_import.py"
+    # run.py puts PORT/scripts on sys.path before it imports native_mods; do the same.
     smoke_script.write_text(
+        f"import sys; sys.path.insert(0, {str(repo_root / 'scripts')!r})\n"
         "import mods, native_mods\n"
         "assert hasattr(mods, 'native_manifest'), 'mods.native_manifest missing'\n"
         "assert hasattr(native_mods, 'prepare'), 'native_mods.prepare missing'\n"
