@@ -21,7 +21,7 @@ from pathlib import Path
 FORK_REPO = "dizzi1222/bloodborne_pc"
 UPSTREAM_REPO = "Supermedo/bloodborne_pc"
 UA = "HuntersAtlas-Updater/2.0"
-PRESERVE = {"user", "mods", "bbport.ini", "input.ini", "mods.json", "patches.json",
+PRESERVE = {"user", "out", "mods", "bbport.ini", "input.ini", "mods.json", "patches.json",
             "fsr4vk", "seamless", "bbsc", "last_run.log"}
 MOD_FOLDER = "Hunter's Atlas"
 HOST_RE = re.compile(r"^(?:bbport-atlas-host|Hunters-Atlas-[0-9.]+-bbport-host)-"
