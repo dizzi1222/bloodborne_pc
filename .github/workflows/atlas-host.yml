@@ -48,6 +48,8 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The checkout has an "upstream" remote; never let gh pick Supermedo/bloodborne_pc.
+      GH_REPO: ${{ github.repository }}
 
     steps:
       - name: Configure Git for LF line endings and long paths
