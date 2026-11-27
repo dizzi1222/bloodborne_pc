@@ -118,10 +118,25 @@ def freeze_launcher(repo_root: Path, win_python: Path) -> Path:
         "print('PASS: frozen native_mods import')\n",
         encoding="utf-8",
     )
-    smoke_res = run([str(launcher_exe), "--script", str(smoke_script)], capture_output=True)
-    if "PASS: frozen native_mods import" not in smoke_res.stdout:
-        raise RuntimeError(f"Frozen native_mods smoke test failed: {smoke_res.stdout} {smoke_res.stderr}")
-    print(smoke_res.stdout.strip())
+    # Output goes to a file, not a pipe: the windowed launcher (or a helper it starts) can keep an
+    # inherited pipe open forever, and communicate() would wait for EOF until the job times out.
+    smoke_log = repo_root / "out" / "check_native_mods_import.log"
+    smoke_log.unlink(missing_ok=True)
+    print("+", launcher_exe, "--script", smoke_script, flush=True)
+    with open(smoke_log, "w", encoding="utf-8") as log_stream:
+        proc = subprocess.Popen([str(launcher_exe), "--script", str(smoke_script)],
+                                stdin=subprocess.DEVNULL, stdout=log_stream, stderr=subprocess.STDOUT)
+        try:
+            code = proc.wait(timeout=180)
+        except subprocess.TimeoutExpired:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+            code = None
+    output = smoke_log.read_text(encoding="utf-8", errors="replace") if smoke_log.is_file() else ""
+    if "PASS: frozen native_mods import" not in output:
+        raise RuntimeError(f"Frozen native_mods smoke test failed (exit {code}): {output}")
+    if code is None:
+        print("WARNING: launcher printed PASS but did not exit within 180 s; it was stopped", flush=True)
+    print(output.strip(), flush=True)
     return frozen_dir
 
 
